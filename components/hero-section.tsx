@@ -1,6 +1,7 @@
 'use client'
 
 
+import { useEffect, useRef } from 'react'
 import { useSatQuery } from '@/components/satquery-context'
 import { Card } from '@/components/ui/card'
 import { Trees, Waves, Leaf, Mountain, ArrowRight, Loader2 } from 'lucide-react'
@@ -476,6 +477,49 @@ const suggestions = [
 export function HeroSection() {
   const { setQuery, sentQuery, isAnalyzing, analysisResults } = useSatQuery()
 
+  // Guards so the "save to recent chats" hook (see effect below) only
+  // fires once per completed analysis, not on every re-render.
+  const savedResultRef = useRef<unknown>(null)
+
+  useEffect(() => {
+    if (!analysisResults || isAnalyzing) return
+    if (savedResultRef.current === analysisResults) return
+    savedResultRef.current = analysisResults
+
+    /**
+     * BACKEND INTEGRATION: Save completed chat to Recent Chats
+     * -------------------------------------------------------------
+     * This fires exactly once per finished analysis (sentQuery +
+     * analysisResults both settled). This is where a finished exchange
+     * should be written to the recent-chats list so it's visible next
+     * time the user opens the sidebar/history panel.
+     *
+     * Suggested implementation:
+     *   const chatId = currentChatId ?? crypto.randomUUID()
+     *   const record = {
+     *     id: chatId,
+     *     title: sentQuery?.slice(0, 60) ?? 'Untitled analysis',
+     *     preview: analysisResults.summary,
+     *     datasetId: dataset?.id ?? null,
+     *     createdAt: existingRecord?.createdAt ?? Date.now(),
+     *     updatedAt: Date.now(),
+     *   }
+     *   // Remote persistence:
+     *   await fetch('/api/chats', {
+     *     method: existingRecord ? 'PATCH' : 'POST',
+     *     body: JSON.stringify(record),
+     *   })
+     *   // Local-first fallback:
+     *   const recents = JSON.parse(localStorage.getItem('recentChats') ?? '[]')
+     *   localStorage.setItem(
+     *     'recentChats',
+     *     JSON.stringify([record, ...recents.filter((r) => r.id !== chatId)].slice(0, 20))
+     *   )
+     *   // Then notify whatever renders the sidebar (context/store) so the
+     *   // new/updated entry appears without a manual refresh.
+     */
+  }, [analysisResults, isAnalyzing, sentQuery])
+
   return (
     <div className="hero-content">
       {/* Hero headline and subtext */}
@@ -531,29 +575,69 @@ export function HeroSection() {
         ))}
       </div>
 
-      {/* Sent query display */}
+      {/* Sent query display — fades/slides in the moment a query is sent */}
       {/* BACKEND: Current analysis status from GET /api/analysis/:id/status */}
       {sentQuery && (
-        <div className="sent-query" role="status">
+        <div className="sent-query hero-fade-in" role="status">
           Analysing: <strong>{sentQuery}</strong>
         </div>
       )}
 
-      {/* Analysis loading state */}
+      {/* Analysis loading state — pulsing dot instead of a static spinner
+          label, to read as "working" rather than "stuck" */}
       {isAnalyzing && (
-        <div className="analysis-loading" role="status" aria-live="polite">
-          <Loader2 />
+        <div className="analysis-loading hero-fade-in" role="status" aria-live="polite">
+          <Loader2 className="animate-spin" />
           <span>Processing satellite data...</span>
         </div>
       )}
 
-      {/* Analysis results display */}
+      {/* Analysis results display — settles in with a short fade + slight
+          upward slide once results are ready, answering the loading state
+          rather than appearing unannounced. */}
       {/* BACKEND: Analysis results from GET /api/analysis/:id/results */}
       {analysisResults && !isAnalyzing && (
-        <div className="analysis-result" role="status" aria-live="polite">
+        <div className="analysis-result hero-result-in" role="status" aria-live="polite">
           <strong>Analysis Complete:</strong> {analysisResults.summary}
         </div>
       )}
+
+      <style jsx>{`
+        .hero-fade-in {
+          animation: heroFadeIn 260ms ease-out;
+        }
+
+        .hero-result-in {
+          animation: heroResultIn 320ms cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @keyframes heroFadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
+        @keyframes heroResultIn {
+          from {
+            opacity: 0;
+            transform: translateY(6px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .hero-fade-in,
+          .hero-result-in {
+            animation: none !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }

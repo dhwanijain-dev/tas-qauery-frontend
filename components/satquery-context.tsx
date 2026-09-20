@@ -235,6 +235,7 @@ export function useSatQuery() {
   return ctx
 }
 
+
 /**
  * BACKEND INTEGRATION: SatQueryProvider
  *
@@ -260,7 +261,7 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
   const [sentQuery, setSentQuery] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(null)
-
+ 
   /**
    * BACKEND INTEGRATION: submitQuery
    *
@@ -331,7 +332,9 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
    */
   const loadChat = useCallback((chat: ChatItem) => {
     setActiveNav('New Chat')
-    setQuery(chat.title)
+  setQuery(chat.title)
+  setSentQuery('')
+  setAnalysisResults(null)
   }, [])
 
   // --- Upload ---

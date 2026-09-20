@@ -38,7 +38,43 @@ const navItems = [
  * and mobile Sheet drawer. Extracted to avoid duplicating markup.
  */
 function SidebarContent() {
-  const { activeNav, setActiveNav, recentChats, loadChat } = useSatQuery()
+  // `activeChat` and `startNewSession` are NOT in the original context —
+  // see the "satquery-context additions" notes shared alongside this file.
+  // They're read with optional chaining below so this component still
+  // compiles/renders even before you've added them, it just won't
+  // highlight the active chat or reset the draft until you do.
+  const { activeNav, setActiveNav, recentChats, loadChat, activeChat, startNewSession } =
+    useSatQuery() as ReturnType<typeof useSatQuery> & {
+      activeChat?: { id: string } | null
+      startNewSession?: () => void
+    }
+
+  const handleNavClick = (name: string) => {
+    setActiveNav(name)
+
+    if (name === 'New Chat') {
+      /**
+       * BACKEND/STATE INTEGRATION: New Chat (sidebar entry point)
+       * ---------------------------------------------------------------
+       * This mirrors ChatShell's own "New chat" button so both entry
+       * points behave identically: whatever draft is currently on
+       * screen should be persisted into `recentChats` before it's
+       * cleared. Right now that persistence happens inside ChatShell
+       * (it owns the in-progress `messages` array), so calling
+       * startNewSession() here only clears context-level state
+       * (sentQuery/analysisResults/activeChat) — ChatShell reacts to
+       * that and clears its local draft too, but won't have a chance to
+       * save it first.
+       *
+       * To make both "New Chat" buttons save-then-reset consistently,
+       * migrate the in-progress `messages` array into SatQueryContext
+       * (see ChatShell.tsx's top-of-file note) so a single
+       * `startNewSession()` in the context can do save + clear in one
+       * place, and both this button and ChatShell's button just call it.
+       */
+      startNewSession?.()
+    }
+  }
 
   return (
     <>
@@ -61,7 +97,7 @@ function SidebarContent() {
             key={name}
             variant="ghost"
             className={`nav-item ${activeNav === name ? 'active' : ''}`}
-            onClick={() => setActiveNav(name)}
+            onClick={() => handleNavClick(name)}
           >
             <Icon data-icon="inline-start" />
             {name}
@@ -78,7 +114,7 @@ function SidebarContent() {
         <ScrollArea>
           {recentChats.map((chat) => (
             <button
-              className="recent-chat"
+              className={`recent-chat ${activeChat?.id === chat.id ? 'active' : ''}`}
               key={chat.id}
               onClick={() => {
                 /* BACKEND: Load chat from GET /api/chats/:id */
@@ -104,6 +140,13 @@ function SidebarContent() {
 /**
  * LeftSidebar — Desktop sidebar with brand, navigation,
  * recent chats, and decorative footer text.
+ *
+ * RESPONSIVENESS: this component's own markup is unchanged — visibility
+ * across breakpoints (hidden on mobile in favor of MobileSidebarTrigger's
+ * Sheet drawer) is expected to be handled by your existing CSS for
+ * `.left-sidebar` (e.g. `display: none` under a breakpoint, shown again
+ * inside the Sheet via the shared `.left-sidebar` class). No change needed
+ * here unless that rule doesn't already exist.
  */
 export function LeftSidebar() {
   return (
