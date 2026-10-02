@@ -18,20 +18,7 @@ function AppShell() {
       {/* Main Workspace */}
       <main className="workspace">
         {/* Top bar — mobile brand + theme toggle */}
-        <header className="topbar">
-          {/* Mobile menu trigger — only visible on small screens */}
-          <MobileSidebarTrigger />
-          <div className="mobile-brand">SatQuery AI</div>
-          {/* BACKEND: Theme preference can be persisted via PUT /api/user/settings { theme } */}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleDarkMode}
-            aria-label="Toggle color mode"
-          >
-            {darkMode ? <Sun /> : <Moon />}
-          </Button>
-        </header>
+        
 
         {/*
           ChatShell replaces the previous direct <HeroSection /> + <Composer />

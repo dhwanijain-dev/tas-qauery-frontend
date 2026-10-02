@@ -39,12 +39,12 @@ export function Composer() {
     addUploadedImage,
     removeUploadedImage
   } = useSatQuery()
-
-  const [cloudCover, setCloudCover] = useState(20)
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
-  const [selectedBands, setSelectedBands] = useState<string[]>([])
-  const [resolution, setResolution] = useState('')
+const [cloudCover, setCloudCover] = useState(20)
+const [dateFrom, setDateFrom] = useState('')
+const [dateTo, setDateTo] = useState('')
+const [selectedBands, setSelectedBands] = useState<string[]>([])
+const [resolution, setResolution] = useState('')
+const [error, setError] = useState('')
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -72,14 +72,34 @@ export function Composer() {
   // Newly-added thumbnails get a quick fade/scale-in so attaching an image
   // feels responsive rather than just "popping" into place.
   const [justAddedIndex, setJustAddedIndex] = useState<number | null>(null)
+  const handleAttachClick = () => {
+    if (uploadedImages.length >= 2) return
 
+    fileInputRef.current?.click()
+  }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const files = Array.from(e.target.files)
-      files.forEach((file) => addUploadedImage(file))
-      // Flag the last newly-added item for the entrance animation.
-      setJustAddedIndex(uploadedImages.length + files.length - 1)
+    if (!e.target.files) return
+
+    const selectedFiles = Array.from(e.target.files)
+
+    const supported = selectedFiles.filter((file) =>
+      /\.(tif|tiff|png|jpe?g)$/i.test(file.name)
+    )
+
+    const remainingSlots = Math.max(0, 2 - uploadedImages.length)
+
+    const filesToAdd = supported.slice(0, remainingSlots)
+
+    filesToAdd.forEach((file) => {
+      addUploadedImage(file)
+    })
+
+    if (filesToAdd.length > 0) {
+      setJustAddedIndex(
+        uploadedImages.length + filesToAdd.length - 1
+      )
     }
+
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
@@ -90,9 +110,6 @@ export function Composer() {
   // dialog. Selected files are attached immediately and rendered as
   // preview chips above the composer input, mirroring the Claude / ChatGPT
   // attach flow.
-  const handleAttachClick = () => {
-    fileInputRef.current?.click()
-  }
 
   const toggleBand = (band: string) => {
     setSelectedBands((prev) =>
@@ -106,7 +123,19 @@ export function Composer() {
   // Send handler
   // ---------------------------------------------------------------------
   const handleSubmit = () => {
-    if (isAnalyzing || !query.trim()) return
+    if (isAnalyzing) return
+
+  if (!query.trim()) return
+
+  if (uploadedImages.length === 0) {
+    setError('Attach an image before sending your question.')
+    return
+  }
+
+  setError('')
+
+  void submitQuery()
+
 
     /**
      * BACKEND INTEGRATION: Recent Chats persistence
@@ -174,17 +203,31 @@ export function Composer() {
               >
                 <X className="h-3 w-3" />
               </button>
-              <span className="attachment-chip-name">{file.name}</span>
-            </div>
+<span className="text-[11px] text-[#91a098]">
+  {uploadedImages.length >= 2
+    ? 'Maximum 2 images attached'
+    : 'Attach up to 2 satellite images'}
+</span>            
+</div>
           ))}
         </div>
       )}
 
       {/* Composer input bar */}
+     {/* ```tsx */}
+      {/* Composer input bar */}
       <div className="composer">
-        {/* Attach image — opens the native file picker directly (no dialog) */}
-        <button aria-label="Attach image" onClick={handleAttachClick} className="relative">
+
+        {/* Attach image */}
+        <button
+          type="button"
+          aria-label="Attach image"
+          onClick={handleAttachClick}
+          disabled={uploadedImages.length >= 2}
+          className="relative"
+        >
           <ImageIcon />
+
           {uploadedImages.length > 0 && (
             <Badge className="absolute -top-2 -right-2 px-1 py-0 text-[10px] min-w-[16px] h-4 flex items-center justify-center">
               {uploadedImages.length}
@@ -192,40 +235,67 @@ export function Composer() {
           )}
         </button>
 
-        {/* Hidden native input drives every "attach" entry point below */}
+        {/* Hidden native file input */}
         <input
           type="file"
           ref={fileInputRef}
           className="hidden"
           multiple
-          accept="image/png, image/jpeg, image/tiff"
+          accept=".tif,.tiff,.png,.jpg,.jpeg"
           onChange={handleFileChange}
         />
 
-        {/* BACKEND: Submit query via POST /api/analysis/query with { query, datasetId, tool, imageIds, options } */}
+        {/* Question input */}
         <input
           aria-label="Question about satellite image"
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={(e) => {
+            setQuery(e.target.value)
+
+            if (error) {
+              setError('')
+            }
+          }}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing && e.keyCode !== 229) {
+            if (
+              e.key === 'Enter' &&
+              !e.nativeEvent.isComposing &&
+              e.keyCode !== 229
+            ) {
+              e.preventDefault()
               handleSubmit()
             }
           }}
           placeholder="Type your question about the satellite image..."
         />
-        <Button variant="ghost" size="icon" aria-label="Advanced settings" onClick={() => setAdvancedDialogOpen(true)}>
+
+        {/* Advanced settings */}
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Advanced settings"
+          onClick={() => setAdvancedDialogOpen(true)}
+        >
           <Settings2 />
         </Button>
 
-        {/* Send button — swaps into a shimmering "generating" state while
-            isAnalyzing is true, matching the shadcn shimmer-button pattern. */}
+        {/* Send button */}
         <Button
-          className={`send-button${isAnalyzing ? ' send-button-generating' : ''}`}
+          className={`send-button${
+            isAnalyzing ? ' send-button-generating' : ''
+          }`}
           size="icon"
           onClick={handleSubmit}
-          aria-label={isAnalyzing ? 'Generating response' : 'Send question'}
-          disabled={isAnalyzing || !query.trim()}
+          aria-label={
+            isAnalyzing
+              ? 'Generating response'
+              : 'Send question'
+          }
+          disabled={
+            isAnalyzing ||
+            !query.trim() ||
+            uploadedImages.length === 0
+          }
         >
           {isAnalyzing ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -235,31 +305,53 @@ export function Composer() {
         </Button>
       </div>
 
+      {/* Error */}
+      {error && (
+        <p className="mt-2 rounded-lg border border-[#e4b8a9] bg-[#fff2ed] px-3 py-2 text-xs text-[#a04b3d]">
+          {error}
+        </p>
+      )}
+
       {/* Action buttons below composer */}
       <div className="composer-actions">
-        {/* Same direct-picker behavior as the composer's image icon */}
-        <Button variant="outline" onClick={handleAttachClick}>
-          <Upload data-icon="inline-start" className="mr-2 h-4 w-4" />Upload Image
-        </Button>
-        {/* BACKEND: Opens map selector. Selected area sent as GeoJSON to POST /api/analysis/area */}
-        <Button variant="outline">
-          <Scan data-icon="inline-start" className="mr-2 h-4 w-4" />Select Area
+
+        {/* Upload image */}
+        <Button
+          variant="outline"
+          onClick={handleAttachClick}
+          disabled={uploadedImages.length >= 2}
+        >
+          <Upload
+            data-icon="inline-start"
+            className="mr-2 h-4 w-4"
+          />
+          Upload Image
         </Button>
 
-        {/* BACKEND: Datasets fetched from GET /api/datasets */}
+        {/* Select area */}
+        <Button variant="outline">
+          <Scan
+            data-icon="inline-start"
+            className="mr-2 h-4 w-4"
+          />
+          Select Area
+        </Button>
+
+        {/* Dataset */}
         <DropdownMenu>
           <DropdownMenuTrigger className="inline-flex items-center justify-center rounded-md border px-4 py-2">
-            <Database data-icon="inline-start" className="mr-2 h-4 w-4" />
-            {dataset ? dataset.name : "Choose Dataset"}
+            <Database
+              data-icon="inline-start"
+              className="mr-2 h-4 w-4"
+            />
+            {dataset ? dataset.name : 'Choose Dataset'}
           </DropdownMenuTrigger>
+
           <DropdownMenuContent>
             {availableDatasets.map((ds) => (
               <DropdownMenuItem
                 key={ds.id}
-                onClick={() => {
-                  /* BACKEND: Update active dataset via PUT /api/user/settings { datasetId } */
-                  setDataset(ds)
-                }}
+                onClick={() => setDataset(ds)}
               >
                 {ds.name}
               </DropdownMenuItem>
@@ -267,11 +359,21 @@ export function Composer() {
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {/* BACKEND: Advanced params included in analysis request body */}
-        <Button variant="ghost" className="advanced" onClick={() => setAdvancedDialogOpen(true)}>
-          <Settings2 data-icon="inline-start" className="mr-2 h-4 w-4" />Advanced Options
+        {/* Advanced options */}
+        <Button
+          variant="ghost"
+          className="advanced"
+          onClick={() => setAdvancedDialogOpen(true)}
+        >
+          <Settings2
+            data-icon="inline-start"
+            className="mr-2 h-4 w-4"
+          />
+          Advanced Options
         </Button>
       </div>
+{/* ``` */}
+
 
       {/* -----------------------------------------------------------------
           The old "Upload Satellite Image" confirmation Dialog has been

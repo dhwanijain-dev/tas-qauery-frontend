@@ -542,18 +542,16 @@ export function HeroSection() {
 
       {/* Category cards grid */}
       {/* BACKEND: Categories from GET /api/categories */}
-      <div className="category-grid">
+      {/* <div className="category-grid">
         {categories.map(({ title, desc, Icon }) => (
           <Card
             className="category-card"
             key={title}
             onClick={() => {
-              /* BACKEND: Navigate to category analysis view POST /api/analysis/category/:id */
               setQuery(desc)
             }}
             style={{ cursor: 'pointer' }}
           >
-            {/* BACKEND: Replace with actual satellite thumbnail from GET /api/images/:categoryId/thumb */}
             <SatelliteThumb />
             <div className="category-body">
               <div className="category-icon"><Icon /></div>
@@ -562,51 +560,51 @@ export function HeroSection() {
             </div>
           </Card>
         ))}
-      </div>
+      </div> */}
 
       {/* Query suggestion buttons */}
       {/* BACKEND: Query suggestions from GET /api/suggestions */}
-      <div className="query-suggestions">
+      {/* <div className="query-suggestions">
         {suggestions.map((item) => (
           <button key={item} onClick={() => setQuery(item)}>
             {item}
             <ArrowRight />
           </button>
         ))}
-      </div>
+      </div> */}
 
       {/* Sent query display — fades/slides in the moment a query is sent */}
       {/* BACKEND: Current analysis status from GET /api/analysis/:id/status */}
-      {sentQuery && (
+      {/* {sentQuery && (
         <div className="sent-query hero-fade-in" role="status">
           Analysing: <strong>{sentQuery}</strong>
         </div>
-      )}
+      )} */}
 
       {/* Analysis loading state — pulsing dot instead of a static spinner
           label, to read as "working" rather than "stuck" */}
-      {isAnalyzing && (
-        <div className="analysis-loading hero-fade-in" role="status" aria-live="polite">
-          <Loader2 className="animate-spin" />
-          <span>Processing satellite data...</span>
-        </div>
-      )}
+        {/* {isAnalyzing && (
+          <div className="analysis-loading hero-fade-in" role="status" aria-live="polite">
+            <Loader2 className="animate-spin" />
+            <span>Processing satellite data...</span>
+          </div>
+        )} */}
 
       {/* Analysis results display — settles in with a short fade + slight
           upward slide once results are ready, answering the loading state
           rather than appearing unannounced. */}
       {/* BACKEND: Analysis results from GET /api/analysis/:id/results */}
-      {analysisResults && !isAnalyzing && (
+      {/* {analysisResults && !isAnalyzing && (
         <div className="analysis-result hero-result-in" role="status" aria-live="polite">
           <strong>Analysis Complete:</strong> {analysisResults.summary}
         </div>
-      )}
+      )} */}
 
       <style jsx>{`
         .hero-fade-in {
           animation: heroFadeIn 260ms ease-out;
         }
-
+        
         .hero-result-in {
           animation: heroResultIn 320ms cubic-bezier(0.16, 1, 0.3, 1);
         }

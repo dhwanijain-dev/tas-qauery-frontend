@@ -31,15 +31,31 @@ export interface ChatItem {
  * API Endpoint: POST /api/analysis/query
  * Response: { result: AnalysisResult }
  */
-export interface AnalysisResult {
-  id: string
-  query: string
-  summary: string
-  imageUrl?: string
-  data?: Record<string, unknown>
-  createdAt: string
+export type Box = [number, number, number, number]
+
+export type AnalysisTask = {
+  task: string
+  result: {
+    answer: string
+    caption?: string | null
+    boxes?: Box[]
+    evidence_image?: string | null
+    is_grounding?: boolean
+    latency_seconds?: number
+  }
+  model: Record<string, unknown>
 }
 
+export type AnalysisResult = {
+  request_id: string
+  answer: string | null
+  tasks: AnalysisTask[]
+  execution_trace: {
+    total_latency_seconds: number
+    selected_tasks: string[]
+    workflow: string[]
+  }
+}
 /**
  * BACKEND INTEGRATION: Dataset
  *
@@ -53,6 +69,23 @@ export interface Dataset {
   name: string
   resolution: string
   description?: string
+}
+
+export type ChatMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: number
+  images?: string[]
+  result?: AnalysisResult
+}
+
+export type ChatRecord = {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  datasetId?: string | null
+  updatedAt: number
 }
 
 /**
@@ -87,7 +120,9 @@ interface SatQueryContextValue {
   activeNav: string
   /** Set the active navigation item */
   setActiveNav: (nav: string) => void
-
+activeChat: ChatRecord | null
+saveChatToRecents: (chat: ChatRecord) => void
+startNewSession: () => void
   // --- Query / Chat ---
   /** Current text in the composer input */
   query: string
@@ -103,7 +138,7 @@ interface SatQueryContextValue {
    * Replace the local state update with a fetch call to your backend.
    * Set `isAnalyzing` to true before the call, and false after.
    */
-  submitQuery: () => void
+  submitQuery: () => Promise<void>
   /** The most recently submitted query text (for display) */
   sentQuery: string
   /** Whether an analysis is currently in progress */
@@ -203,13 +238,13 @@ const DEFAULT_DATASETS: Dataset[] = [
 ]
 
 /** Default recent chats — replace with API fetch in production */
-const DEFAULT_RECENT_CHATS: ChatItem[] = [
-  { id: '1', title: 'Deforestation analysis ...' },
-  { id: '2', title: 'Flood extent in Assam' },
-  { id: '3', title: 'Crop health comparison' },
-  { id: '4', title: 'Urban expansion Delhi' },
-  { id: '5', title: 'Coastal change analysis' },
-]
+// const DEFAULT_RECENT_CHATS: ChatItem[] = [
+//   { id: '1', title: 'Deforestation analysis ...' },
+//   { id: '2', title: 'Flood extent in Assam' },
+//   { id: '3', title: 'Crop health comparison' },
+//   { id: '4', title: 'Urban expansion Delhi' },
+//   { id: '5', title: 'Coastal change analysis' },
+// ]
 
 /** Default user — replace with auth integration in production */
 const DEFAULT_USER: UserProfile = {
@@ -261,6 +296,7 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
   const [sentQuery, setSentQuery] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResults, setAnalysisResults] = useState<AnalysisResult | null>(null)
+  const [uploadedImages, setUploadedImages] = useState<File[]>([])
  
   /**
    * BACKEND INTEGRATION: submitQuery
@@ -293,24 +329,75 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
    *   }
    * }
    */
-  const submitQuery = useCallback(() => {
-    if (!query.trim()) return
-    const q = query.trim()
-    setSentQuery(q)
-    setQuery('')
-    setIsAnalyzing(true)
+  // const submitQuery = useCallback(() => {
+  //   if (!query.trim()) return
+  //   const q = query.trim()
+  //   setSentQuery(q)
+  //   setQuery('')
+  //   setIsAnalyzing(true)
 
-    // Mock: simulate a 2-second analysis delay
-    setTimeout(() => {
-      setAnalysisResults({
-        id: Date.now().toString(),
-        query: q,
-        summary: `Analysis complete for: "${q}"`,
-        createdAt: new Date().toISOString(),
-      })
-      setIsAnalyzing(false)
-    }, 2000)
-  }, [query])
+  //   // Mock: simulate a 2-second analysis delay
+  //   setTimeout(() => {
+  //     setAnalysisResults({
+  //       id: Date.now().toString(),
+  //       query: q,
+  //       summary: `Analysis complete for: "${q}"`,
+  //       createdAt: new Date().toISOString(),
+  //     })
+  //     setIsAnalyzing(false)
+  //   }, 2000)
+  // }, [query])
+
+const submitQuery = useCallback(async () => {
+  if (!query.trim() || isAnalyzing || uploadedImages.length === 0) return
+
+  const currentPrompt = query.trim()
+  const currentFiles = [...uploadedImages]
+
+  setSentQuery(currentPrompt)
+  setQuery('')
+  setIsAnalyzing(true)
+
+  try {
+    const form = new FormData()
+
+    form.append('query', currentPrompt)
+
+    form.append(
+      'modalities',
+      currentFiles.length === 2 ? 'unknown,pair' : 'unknown'
+    )
+
+    currentFiles.forEach((file, index) => {
+      form.append(
+        index === 0 ? 'image1' : 'image2',
+        file,
+        file.name
+      )
+    })
+
+    const response = await fetch('http://localhost:8000/analyze', {
+      method: 'POST',
+      body: form,
+    })
+
+    const body = await response.json()
+
+    if (!response.ok) {
+      throw new Error(
+        body.detail ?? 'The analysis could not be completed.'
+      )
+    }
+
+    setAnalysisResults(body)
+  } catch (error) {
+    console.error('SatQuery analysis failed:', error)
+
+    setAnalysisResults(null)
+  } finally {
+    setIsAnalyzing(false)
+  }
+}, [query, uploadedImages, isAnalyzing])
 
   // --- Dataset ---
   const [dataset, setDataset] = useState<Dataset>(DEFAULT_DATASETS[0])
@@ -320,9 +407,21 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
   const [selectedTool, setSelectedTool] = useState<string | null>(null)
 
   // --- Recent Chats ---
-  const [recentChats] = useState<ChatItem[]>(DEFAULT_RECENT_CHATS)
+ type ChatItem = {
+  id: string;
+  title: string;
+};
 
-  /**
+type AnalysisResult = {
+  summary: string;
+};
+
+const [recentChats, setRecentChats] = useState<ChatRecord[]>([])
+const [activeChat, setActiveChat] = useState<ChatRecord | null>(null)
+
+//@ts-ignore
+const [messages, setMessages] = useState<Message[]>([])
+/**
    * BACKEND INTEGRATION: loadChat
    *
    * API Endpoint: GET /api/chats/:id
@@ -330,17 +429,34 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
    *
    * Load full chat history and display in workspace.
    */
-  const loadChat = useCallback((chat: ChatItem) => {
-    setActiveNav('New Chat')
-  setQuery(chat.title)
+ const loadChat = useCallback((chat: ChatRecord) => {
+  setActiveNav('New Chat')
+  setActiveChat(chat)
+
+  setQuery('')
   setSentQuery('')
   setAnalysisResults(null)
-  }, [])
+}, [])
+  const saveChatToRecents = useCallback((chat: ChatRecord) => {
+  setRecentChats((previous) => {
+    const filtered = previous.filter((item) => item.id !== chat.id)
+
+    return [chat, ...filtered].slice(0, 20)
+  })
+}, [])
+
+const startNewSession = useCallback(() => {
+  setActiveChat(null)
+  setQuery('')
+  setSentQuery('')
+  setAnalysisResults(null)
+  setUploadedImages([])
+}, [])
 
   // --- Upload ---
-  const [uploadedImages, setUploadedImages] = useState<File[]>([])
 
   /**
+  const [uploadedImages, setUploadedImages] = useState<File[]>([])
    * BACKEND INTEGRATION: addUploadedImage
    *
    * API Endpoint: POST /api/images/upload
@@ -349,9 +465,15 @@ export function SatQueryProvider({ children }: { children: ReactNode }) {
    *
    * Upload the file to your backend and store the returned imageId.
    */
-  const addUploadedImage = useCallback((file: File) => {
-    setUploadedImages((prev) => [...prev, file])
-  }, [])
+ const addUploadedImage = useCallback((file: File) => {
+  setUploadedImages((previous) => {
+    if (previous.length >= 2) {
+      return previous
+    }
+
+    return [...previous, file]
+  })
+}, [])
 
   const removeUploadedImage = useCallback((index: number) => {
     setUploadedImages((prev) => prev.filter((_, i) => i !== index))

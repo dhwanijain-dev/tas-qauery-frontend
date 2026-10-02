@@ -64,6 +64,7 @@ let numbersOfRings = [0];
 
 export function Globe({ globeConfig, data }: WorldProps) {
   const globeRef = useRef<ThreeGlobe | null>(null);
+  //@ts-ignore
   const groupRef = useRef();
   const [isInitialized, setIsInitialized] = useState(false);
 
@@ -231,8 +232,8 @@ export function Globe({ globeConfig, data }: WorldProps) {
       clearInterval(interval);
     };
   }, [isInitialized, data]);
-
-  return <group ref={groupRef} />;
+  //@ts-ignore
+  return <group ref={groupRef} />
 }
 
 export function WebGLRendererConfig() {
